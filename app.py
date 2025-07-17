@@ -1,46 +1,45 @@
 import streamlit as st
-from pytube import YouTube
 import requests
+import re
 
-# Set your DeepSeek API key
-DEEPSEEK_API_KEY = "your_api_key_here"
+st.set_page_config(page_title="🎥 YouTube Video Summarizer", layout="centered")
+st.title("🎬 YouTube Video Summarizer with DeepSeek AI")
 
-st.title("📽️ YouTube Transcript & Summarizer (DeepSeek)")
+# Input box
+video_url = st.text_input("Enter YouTube Video URL:")
 
-video_url = st.text_input("🔗 Enter YouTube Video URL:")
+# Validate and extract video ID
+def extract_video_id(url):
+    match = re.search(r"(?:v=|youtu\.be/)([^&\n?#]+)", url)
+    return match.group(1) if match else None
 
-if video_url:
-    try:
-        yt = YouTube(video_url)
-        audio_stream = yt.streams.filter(only_audio=True).first()
-        audio_url = audio_stream.url  # no downloading
+# On button click
+if st.button("Summarize"):
+    if not video_url:
+        st.warning("Please enter a valid YouTube URL.")
+    else:
+        video_id = extract_video_id(video_url)
+        if not video_id:
+            st.error("❌ Could not extract video ID from the URL.")
+        else:
+            st.info("⏳ Processing using DeepSeek...")
+            try:
+                api_key = st.secrets["DEEPSEEK_API_KEY"]  # Set this in Streamlit Cloud
+                endpoint = "https://api.deepseek.com/v1/youtube/summarize"
 
-        st.success("🔊 Extracted Audio Stream URL")
-
-        if st.button("Summarize"):
-            with st.spinner("Sending to DeepSeek..."):
-                # Call DeepSeek with audio URL
                 headers = {
-                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json"
                 }
 
-                payload = {
-                    "input": audio_url,
-                    "task": "transcribe_and_summarize"
-                }
-
-                response = requests.post("https://api.deepseek.com/audio", json=payload, headers=headers)
+                response = requests.post(endpoint, json={"url": video_url}, headers=headers)
 
                 if response.status_code == 200:
-                    data = response.json()
-                    st.markdown("### 📝 Transcript")
-                    st.write(data.get("transcript", "No transcript found."))
-
-                    st.markdown("### ✨ Summary")
-                    st.write(data.get("summary", "No summary found."))
+                    summary = response.json().get("summary", "No summary provided.")
+                    st.success("✅ Summary Ready!")
+                    st.markdown("### 📝 Summary")
+                    st.write(summary)
                 else:
-                    st.error(f"Error: {response.status_code} - {response.text}")
-
-    except Exception as e:
-        st.error(f"❌ Error processing video: {str(e)}")
+                    st.error(f"🚫 API Error: {response.status_code} - {response.text}")
+            except Exception as e:
+                st.error(f"🔥 Exception: {e}")
